@@ -16,7 +16,13 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .manage(state::Core::new(config::load()))
-        .invoke_handler(tauri::generate_handler![commands::get_state])
+        .invoke_handler(tauri::generate_handler![
+            commands::get_state,
+            commands::import_sounds,
+            commands::update_sound,
+            commands::delete_sound,
+            commands::reorder_sounds
+        ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }

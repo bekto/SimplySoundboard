@@ -256,7 +256,10 @@ mod tests {
         assert!((back.settings.monitor_volume - 0.6).abs() < f32::EPSILON);
         assert_eq!(back.settings.retrigger, Retrigger::Restart);
         assert_eq!(
-            back.settings.stop_all_hotkey.expect("default stop all key").code,
+            back.settings
+                .stop_all_hotkey
+                .expect("default stop all key")
+                .code,
             82
         );
     }
@@ -291,7 +294,10 @@ mod tests {
         let settings = serde_json::to_value(Settings::default()).expect("serialize settings");
         assert!(settings.get("stopAllHotkey").is_some());
         assert!(settings.get("stop_all_hotkey").is_none());
-        assert_eq!(settings["stopAllHotkey"]["label"], serde_json::json!("Num 0"));
+        assert_eq!(
+            settings["stopAllHotkey"]["label"],
+            serde_json::json!("Num 0")
+        );
 
         let input = serde_json::to_value(InputStatus {
             state: InputState::NoPermission,
@@ -310,10 +316,9 @@ mod tests {
         let cleared: SoundPatch = serde_json::from_str(r#"{"hotkey":null}"#).expect("null");
         assert_eq!(cleared.hotkey, Some(None));
 
-        let set: SoundPatch = serde_json::from_str(
-            r#"{"hotkey":{"code":82,"mods":[],"label":"Num 0"}}"#,
-        )
-        .expect("set");
+        let set: SoundPatch =
+            serde_json::from_str(r#"{"hotkey":{"code":82,"mods":[],"label":"Num 0"}}"#)
+                .expect("set");
         assert_eq!(set.hotkey.expect("outer").expect("inner").code, 82);
     }
 

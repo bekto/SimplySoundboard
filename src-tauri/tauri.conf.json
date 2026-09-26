@@ -38,6 +38,33 @@
       "icons/128x128@2x.png",
       "icons/icon.icns",
       "icons/icon.ico"
-    ]
+    ],
+    "category": "Music",
+    "shortDescription": "Soundboard with global hotkeys and a virtual microphone",
+    "longDescription": "Plays sounds into a virtual microphone so voice chat hears them, with global hotkeys that work inside games.",
+    "linux": {
+      "deb": {
+        "depends": [
+          "pipewire-pulse",
+          "pulseaudio-utils",
+          "pipewire-bin"
+        ],
+        "files": {
+          "/usr/lib/udev/rules.d/70-simplysoundboard-input.rules": "../packaging/70-simplysoundboard-input.rules"
+        },
+        "postInstallScript": "../packaging/postinst.sh"
+      },
+      "rpm": {
+        "depends": [
+          "pipewire-pulseaudio",
+          "pulseaudio-utils",
+          "pipewire-utils"
+        ],
+        "files": {
+          "/usr/lib/udev/rules.d/70-simplysoundboard-input.rules": "../packaging/70-simplysoundboard-input.rules"
+        },
+        "postInstallScript": "../packaging/postinst.sh"
+      }
+    }
   }
 }

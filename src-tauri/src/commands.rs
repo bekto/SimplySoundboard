@@ -1,14 +1,24 @@
 //! Tauri command handlers exposed to the frontend.
 
+use std::sync::Arc;
+use std::time::Duration;
+
 use tauri::{AppHandle, Manager, State};
 
 use crate::audio;
 use crate::config;
+use crate::hotkeys;
+use crate::hotkeys::dispatcher;
 use crate::library::{self, ImportResult};
 use crate::model::{
-    AppState, MicDevice, RouterState, RouterStatus, Settings, SettingsPatch, Sound, SoundPatch,
+    AppState, InputState, InputStatus, MicDevice, RouterState, RouterStatus, Settings,
+    SettingsPatch, Sound, SoundPatch,
 };
+use crate::permissions;
 use crate::state::{lock, Core};
+
+/// How long `setup_input_access` waits for a keyboard after the rule is installed.
+const PERMISSION_SETUP_WAIT: Duration = Duration::from_secs(2);
 
 /// Everything the frontend needs to render itself.
 #[tauri::command]
@@ -203,4 +213,50 @@ pub fn update_settings(
 pub fn list_mics(app: AppHandle) -> Result<Vec<MicDevice>, String> {
     let settings = app.state::<Core>().config().settings;
     audio::list_mics(&settings)
+}
+
+/// Starts recording the next key press for the UI.
+///
+/// The captured binding arrives as the `key_captured` event; `Esc` cancels
+/// (`key_capture_cancelled`) and `Backspace` clears (`key_captured` with `null`).
+#[tauri::command]
+pub fn begin_key_capture(app: AppHandle, core: State<'_, Core>) -> Result<(), String> {
+    if lock(&core.input).state != InputState::Ok {
+        return Err("Keyboard access is not enabled".to_string());
+    }
+
+    let generation = core.dispatcher.begin_capture();
+    let dispatcher = Arc::clone(&core.dispatcher);
+
+    // A capture that nobody finishes (closed window, walked away) must not leave
+    // the app deaf to hotkeys, so it auto-cancels.
+    std::thread::spawn(move || {
+        std::thread::sleep(dispatcher::CAPTURE_TIMEOUT);
+        if dispatcher.capture_still_open(generation) {
+            log::info!("Key capture timed out");
+            dispatcher.cancel_capture();
+            hotkeys::emit(&app, "key_capture_cancelled", ());
+        }
+    });
+
+    Ok(())
+}
+
+/// Stops recording keys; hotkeys work again.
+#[tauri::command]
+pub fn cancel_key_capture(core: State<'_, Core>) -> Result<(), String> {
+    core.dispatcher.cancel_capture();
+    Ok(())
+}
+
+/// Installs the udev rule through polkit (one password prompt), then waits for a
+/// keyboard to become readable.
+#[tauri::command]
+pub fn setup_input_access(app: AppHandle, core: State<'_, Core>) -> Result<InputStatus, String> {
+    permissions::setup_input_access()?;
+
+    let listener = Arc::clone(&core.listener);
+    let status = permissions::wait_for_keyboard(&listener, PERMISSION_SETUP_WAIT);
+    permissions::publish_input_status(&app);
+    Ok(status)
 }

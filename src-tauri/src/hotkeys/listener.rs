@@ -33,6 +33,8 @@ pub struct Listener {
     open: std::sync::Mutex<Vec<(PathBuf, String)>>,
     /// Keyboard-like paths that exist but could not be opened (no permission).
     denied: std::sync::Mutex<Vec<PathBuf>>,
+    /// Wakes the manager thread for an immediate rescan.
+    wake: std::sync::Mutex<Option<Sender<()>>>,
 }
 
 impl Listener {
@@ -52,29 +54,42 @@ impl Listener {
         lock(&self.denied).clone()
     }
 
+    /// Asks the manager thread to rescan `/dev/input` right now (used after the
+    /// udev rule was installed, so the UI does not have to wait up to 3 s).
+    pub fn rescan_now(&self) {
+        let wake = lock(&self.wake);
+        if let Some(sender) = wake.as_ref() {
+            let _ = sender.send(());
+        }
+    }
+
+    fn set_wake(&self, sender: Sender<()>) {
+        *lock(&self.wake) = Some(sender);
+    }
+
     fn is_open(&self, path: &Path) -> bool {
         lock(&self.open).iter().any(|(open, _)| open == path)
     }
 
-    fn note_opened(&self, path: &Path, name: &str) {
+    pub(crate) fn note_opened(&self, path: &Path, name: &str) {
         let mut open = lock(&self.open);
         if !open.iter().any(|(existing, _)| existing == path) {
             open.push((path.to_path_buf(), name.to_string()));
         }
     }
 
-    fn note_closed(&self, path: &Path) {
+    pub(crate) fn note_closed(&self, path: &Path) {
         lock(&self.open).retain(|(open, _)| open != path);
     }
 
-    fn note_denied(&self, path: &Path) {
+    pub(crate) fn note_denied(&self, path: &Path) {
         let mut denied = lock(&self.denied);
         if !denied.iter().any(|existing| existing == path) {
             denied.push(path.to_path_buf());
         }
     }
 
-    fn clear_denied(&self, path: &Path) {
+    pub(crate) fn clear_denied(&self, path: &Path) {
         lock(&self.denied).retain(|denied| denied != path);
     }
 }
@@ -98,11 +113,17 @@ pub fn spawn(
     listener: Arc<Listener>,
     on_change: Arc<dyn Fn() + Send + Sync>,
 ) {
+    let (wake_sender, wake_receiver) = std::sync::mpsc::channel::<()>();
+    listener.set_wake(wake_sender);
+
     std::thread::spawn(move || loop {
         if scan_once(&keys, &listener) {
             on_change();
         }
-        std::thread::sleep(RESCAN_INTERVAL);
+        // Sleep until the next periodic scan or an explicit rescan request.
+        if wake_receiver.recv_timeout(RESCAN_INTERVAL).is_ok() {
+            log::debug!("Rescanning /dev/input on request");
+        }
     });
 }
 

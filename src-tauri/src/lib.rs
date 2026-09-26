@@ -29,7 +29,10 @@ pub fn run() {
             commands::stop_sound,
             commands::stop_all,
             commands::update_settings,
-            commands::list_mics
+            commands::list_mics,
+            commands::begin_key_capture,
+            commands::cancel_key_capture,
+            commands::setup_input_access
         ])
         .setup(|app| {
             install_signal_handler(app.handle().clone());

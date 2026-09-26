@@ -1,0 +1,3 @@
+# SimplySoundboard: let the logged-in user read keyboards for global hotkeys
+# Installed by the app (pkexec) or shipped by the .deb/.rpm packages.
+SUBSYSTEM=="input", KERNEL=="event*", ENV{ID_INPUT_KEYBOARD}=="1", TAG+="uaccess"

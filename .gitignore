@@ -1,0 +1,25 @@
+# --- agent / planning material (kept local, not part of the app) ---
+/PLAN.md
+/tickets/
+/prototype/
+/.omp/
+/.cline/
+*.local.md
+
+# --- node ---
+node_modules/
+dist/
+dist-ssr/
+.vite/
+npm-debug.log*
+
+# --- rust / tauri ---
+src-tauri/target/
+src-tauri/gen/
+
+# --- editors / os ---
+.DS_Store
+*.swp
+.idea/
+.vscode/*
+!.vscode/extensions.json

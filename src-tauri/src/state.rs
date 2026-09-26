@@ -1,10 +1,12 @@
 //! Shared application state (config, router, input status) managed by Tauri.
 
-use std::sync::{Mutex, MutexGuard};
+use std::sync::{Arc, Mutex, MutexGuard};
 
 use crate::audio::player::Player;
 use crate::audio::router::Router;
 use crate::config;
+use crate::hotkeys::dispatcher::Dispatcher;
+use crate::hotkeys::listener::Listener;
 use crate::model::{Config, InputStatus, RouterStatus};
 
 /// Locks a mutex, recovering from poisoning: a panicked thread must not take the
@@ -24,6 +26,10 @@ pub struct Core {
     pub input: Mutex<InputStatus>,
     /// Running `pw-play` instances.
     pub player: Player,
+    /// Devices the hotkey listener reads.
+    pub listener: Arc<Listener>,
+    /// Key matcher and capture state.
+    pub dispatcher: Arc<Dispatcher>,
 }
 
 impl Core {
@@ -34,6 +40,8 @@ impl Core {
             router_status: Mutex::new(RouterStatus::default()),
             input: Mutex::new(InputStatus::default()),
             player: Player::new(),
+            listener: Arc::new(Listener::default()),
+            dispatcher: Arc::new(Dispatcher::new()),
         }
     }
 

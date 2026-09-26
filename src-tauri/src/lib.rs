@@ -34,6 +34,10 @@ pub fn run() {
         .setup(|app| {
             install_signal_handler(app.handle().clone());
 
+            // Global hotkeys need their own threads; input access problems surface
+            // through the input status rather than blocking startup.
+            hotkeys::start(app.handle());
+
             // Building the audio graph shells out to pactl/pw-play, so never block
             // the main thread on it: failures surface through the router status.
             let handle = app.handle().clone();

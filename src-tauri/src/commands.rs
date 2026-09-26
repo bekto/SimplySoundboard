@@ -101,9 +101,12 @@ pub fn reorder_sounds(
     Ok(())
 }
 
-/// Hook called after every library mutation. T07 fills this in to rebuild the
-/// hotkey bindings from the updated config.
-pub fn on_sounds_changed(_app: &AppHandle) {}
+/// Hook called after every library mutation: rebuilds the hotkey bindings so a
+/// new or changed key takes effect immediately.
+pub fn on_sounds_changed(app: &AppHandle) {
+    let core = app.state::<Core>();
+    core.dispatcher.rebuild(&core.config());
+}
 
 /// Rebuilds the virtual microphone from scratch.
 #[tauri::command]

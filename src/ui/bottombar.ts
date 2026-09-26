@@ -1,9 +1,13 @@
 /**
  * Bottom bar: Stop all, what is playing, and the volume controls.
- * The switch/ranges render from settings; T12 makes them editable.
+ *
+ * The switch and the two sliders write straight through to the backend and render
+ * from the store, so they stay in step with the settings drawer (the other viewer
+ * of the same settings).
  */
 import * as api from "../api";
 import { soundById, subscribe, type State } from "../store";
+import { applySettings, debounce, syncRange } from "./settings";
 import { toast } from "./toast";
 
 export function mountBottombar(): void {
@@ -17,8 +21,20 @@ export function mountBottombar(): void {
   const monitorValue = document.getElementById("bbMeVal") as HTMLElement;
   const monitorWrap = document.getElementById("bbMeWrap") as HTMLElement;
 
+  const writeToMic = debounce(() => void applySettings({ toMicVolume: Number(toMicRange.value) / 100 }));
+  const writeMonitor = debounce(() => void applySettings({ monitorVolume: Number(monitorRange.value) / 100 }));
+
   stopAllBtn.addEventListener("click", () => {
     void api.stopAll().catch((err: unknown) => toast(String(err), "error"));
+  });
+  micSwitch.addEventListener("change", () => void applySettings({ micPassthrough: micSwitch.checked }));
+  toMicRange.addEventListener("input", () => {
+    toMicValue.textContent = `${toMicRange.value}%`;
+    writeToMic();
+  });
+  monitorRange.addEventListener("input", () => {
+    monitorValue.textContent = `${monitorRange.value}%`;
+    writeMonitor();
   });
 
   function renderNowPlaying(st: State): void {
@@ -35,13 +51,13 @@ export function mountBottombar(): void {
   }
 
   subscribe((st) => {
-    stopKbd.textContent = st.settings.stopAllHotkey?.label ?? "—";
-    micSwitch.checked = st.settings.micPassthrough;
-    toMicRange.value = String(Math.round(st.settings.toMicVolume * 100));
-    toMicValue.textContent = `${toMicRange.value}%`;
-    monitorRange.value = String(Math.round(st.settings.monitorVolume * 100));
-    monitorValue.textContent = `${monitorRange.value}%`;
-    monitorWrap.classList.toggle("disabled", !st.settings.monitorEnabled);
+    const settings = st.settings;
+    stopKbd.textContent = settings.stopAllHotkey?.label ?? "—";
+    micSwitch.checked = settings.micPassthrough;
+    syncRange(toMicRange, toMicValue, settings.toMicVolume);
+    syncRange(monitorRange, monitorValue, settings.monitorVolume);
+    monitorWrap.classList.toggle("disabled", !settings.monitorEnabled);
+    monitorRange.disabled = !settings.monitorEnabled;
     renderNowPlaying(st);
   });
 }

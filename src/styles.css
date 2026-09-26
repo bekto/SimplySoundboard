@@ -127,6 +127,8 @@ input[type=range]{accent-color:var(--accent);width:100px}
 .field{display:flex;flex-direction:column;gap:6px}
 .field>label{font-size:12px;color:var(--muted);display:flex;justify-content:space-between}
 .field input[type=text],.field select{background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:8px 10px;outline:none;width:100%}
+/* Added for T12: WebKitGTK paints the native select light, hiding the text on the dark field. */
+.field select{appearance:none;-webkit-appearance:none;color:var(--text);padding-right:30px;background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='10' height='6'><path d='M1 1l4 4 4-4' fill='none' stroke='%238b90a1' stroke-width='1.5' stroke-linecap='round'/></svg>");background-repeat:no-repeat;background-position:right 11px center}
 .field input[type=text]:focus,.field select:focus{border-color:var(--accent)}
 .field input[type=range]{width:100%}
 .edit-top{display:flex;gap:12px;align-items:flex-end}

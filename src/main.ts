@@ -11,6 +11,7 @@ import { hydrateIcons } from "./icons";
 import { set, state } from "./store";
 import { mountBottombar } from "./ui/bottombar";
 import { mountGrid } from "./ui/grid";
+import { mountSettings } from "./ui/settings";
 import { mountTopbar, importPaths } from "./ui/topbar";
 import { toast } from "./ui/toast";
 
@@ -32,6 +33,7 @@ async function boot(): Promise<void> {
   mountTopbar();
   mountGrid();
   mountBottombar();
+  mountSettings();
 
   const dropOverlay = document.getElementById("drop") as HTMLElement;
   await Promise.all([

@@ -3,6 +3,7 @@ import { open } from "@tauri-apps/plugin-dialog";
 import * as api from "../api";
 import type { RouterStatus } from "../api";
 import { set, state, subscribe } from "../store";
+import { openDrawer } from "./settings";
 import { toast } from "./toast";
 
 /** Extensions the backend can import (PLAN.md §5). */
@@ -50,17 +51,20 @@ export async function importPaths(paths: string[]): Promise<void> {
 }
 
 /**
- * Wires the top bar. The pill is display-only: its click opens the settings
- * drawer in T12, so no handler is attached yet.
+ * Wires the top bar. The pill and the sliders button both open the settings
+ * drawer; its contents live in `settings.ts`.
  */
 export function mountTopbar(): void {
   const pill = document.getElementById("routerPill") as HTMLButtonElement;
   const routerText = document.getElementById("routerText") as HTMLElement;
   const search = document.getElementById("search") as HTMLInputElement;
   const addBtn = document.getElementById("addBtn") as HTMLButtonElement;
+  const settingsBtn = document.getElementById("settingsBtn") as HTMLButtonElement;
 
   search.addEventListener("input", () => set({ query: search.value }));
   addBtn.addEventListener("click", () => void pickSounds());
+  pill.addEventListener("click", openDrawer);
+  settingsBtn.addEventListener("click", openDrawer);
 
   subscribe((st) => {
     pill.classList.toggle("error", st.router.state === "error");

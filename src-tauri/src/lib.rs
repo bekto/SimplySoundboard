@@ -27,7 +27,9 @@ pub fn run() {
             commands::restart_router,
             commands::play_sound,
             commands::stop_sound,
-            commands::stop_all
+            commands::stop_all,
+            commands::update_settings,
+            commands::list_mics
         ])
         .setup(|app| {
             install_signal_handler(app.handle().clone());

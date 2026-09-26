@@ -5,7 +5,9 @@ use tauri::{AppHandle, Manager, State};
 use crate::audio;
 use crate::config;
 use crate::library::{self, ImportResult};
-use crate::model::{AppState, RouterState, RouterStatus, Sound, SoundPatch};
+use crate::model::{
+    AppState, MicDevice, RouterState, RouterStatus, Settings, SettingsPatch, Sound, SoundPatch,
+};
 use crate::state::{lock, Core};
 
 /// Everything the frontend needs to render itself.
@@ -146,4 +148,56 @@ pub fn stop_sound(app: AppHandle, id: String) -> Result<(), String> {
 pub fn stop_all(app: AppHandle) -> Result<(), String> {
     app.state::<Core>().player.stop_all();
     Ok(())
+}
+
+/// Applies a partial settings update: persist first, then bring the live audio in
+/// line. A failing device leaves the settings saved and reports the error.
+#[tauri::command]
+pub fn update_settings(
+    app: AppHandle,
+    core: State<'_, Core>,
+    patch: SettingsPatch,
+) -> Result<Settings, String> {
+    let before = core.config().settings;
+    let captured_default = audio::capture_previous_default(&before, &patch);
+
+    let after = core.mutate_config(|config| {
+        config.settings.apply_patch(&patch)?;
+        if let Some(previous) = captured_default.as_ref() {
+            config.settings.previous_default_source = Some(previous.clone());
+        }
+        Ok(config.settings.clone())
+    })?;
+
+    let mut errors: Vec<String> = Vec::new();
+
+    // Turning "use as default mic" off hands the saved source back.
+    if patch.use_as_default_mic == Some(false) {
+        if let Some(previous) = before.previous_default_source.as_deref() {
+            if let Err(err) = audio::restore_default_source(previous) {
+                errors.push(format!("default input: {err}"));
+            }
+        }
+    }
+
+    if let Err(err) = audio::apply_settings(&app, &after) {
+        errors.push(err);
+    }
+
+    if patch.stop_all_hotkey.is_some() {
+        on_sounds_changed(&app);
+    }
+
+    if errors.is_empty() {
+        Ok(after)
+    } else {
+        Err(errors.join("; "))
+    }
+}
+
+/// Real microphone devices for the settings picker.
+#[tauri::command]
+pub fn list_mics(app: AppHandle) -> Result<Vec<MicDevice>, String> {
+    let settings = app.state::<Core>().config().settings;
+    audio::list_mics(&settings)
 }

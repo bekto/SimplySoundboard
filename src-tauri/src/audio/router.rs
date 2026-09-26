@@ -6,7 +6,7 @@
 //! optional loopback C (real mic → `ssb_mix`) for voice pass-through.
 
 use crate::audio::pactl;
-use crate::model::Settings;
+use crate::model::{Settings, MAX_VOLUME};
 
 /// Prefix of every device and module argument we create; also used to find stale
 /// modules from a previous crashed run.
@@ -23,6 +23,10 @@ const MIC_DESCRIPTION: &str = "SimplySoundboard Mic";
 /// Loopback latency: low enough to feel live, high enough to avoid dropouts.
 pub const LOOPBACK_LATENCY_MS: u32 = 20;
 
+/// A fresh loopback needs a moment before its sink-input shows up in `pactl`.
+const VOLUME_LOOKUP_ATTEMPTS: u32 = 10;
+const VOLUME_LOOKUP_DELAY_MS: u64 = 50;
+
 /// Module ids of the running virtual microphone.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Router {
@@ -32,6 +36,8 @@ pub struct Router {
     pub loop_fx_mix: u32,
     pub loop_monitor: Option<u32>,
     pub loop_mic: Option<u32>,
+    /// Real microphone currently piped in by loopback C.
+    pub mic_input: Option<String>,
 }
 
 impl Router {
@@ -106,21 +112,24 @@ impl Router {
         };
 
         // C: the real microphone into the mix.
-        let loop_mic = if settings.mic_passthrough {
+        let (loop_mic, mic_input) = if settings.mic_passthrough {
             match resolve_mic_source(settings)? {
-                Some(mic) => Some(load_tracked(
-                    loaded,
-                    "module-loopback",
-                    &[
-                        format!("source={mic}"),
-                        format!("sink={MIX_SINK}"),
-                        latency(),
-                    ],
-                )?),
-                None => None,
+                Some(mic) => (
+                    Some(load_tracked(
+                        loaded,
+                        "module-loopback",
+                        &[
+                            format!("source={mic}"),
+                            format!("sink={MIX_SINK}"),
+                            latency(),
+                        ],
+                    )?),
+                    Some(mic),
+                ),
+                None => (None, None),
             }
         } else {
-            None
+            (None, None)
         };
 
         Ok(Self {
@@ -130,6 +139,7 @@ impl Router {
             loop_fx_mix,
             loop_monitor,
             loop_mic,
+            mic_input,
         })
     }
 
@@ -140,6 +150,7 @@ impl Router {
         }
         self.loop_mic = None;
         self.loop_monitor = None;
+        self.mic_input = None;
     }
 
     /// Module ids in creation order.
@@ -148,6 +159,137 @@ impl Router {
         ids.extend(self.loop_monitor);
         ids.extend(self.loop_mic);
         ids
+    }
+
+    /// Brings the live graph in line with `settings` and applies all three volumes.
+    pub fn apply_all(&mut self, settings: &Settings) -> Result<(), String> {
+        let mut errors = Vec::new();
+        collect_error(
+            &mut errors,
+            self.sync_monitor_loop(settings),
+            "monitor loopback",
+        );
+        collect_error(
+            &mut errors,
+            self.sync_mic_loop(settings),
+            "microphone loopback",
+        );
+        collect_error(&mut errors, self.apply_volumes(settings), "volumes");
+        join_errors(errors)
+    }
+
+    /// Loads or unloads loopback B to match `monitor_enabled`.
+    pub fn sync_monitor_loop(&mut self, settings: &Settings) -> Result<(), String> {
+        match (settings.monitor_enabled, self.loop_monitor) {
+            (true, None) => {
+                self.loop_monitor = Some(pactl::load_module(
+                    "module-loopback",
+                    &[format!("source={FX_SINK}.monitor"), latency()],
+                )?);
+            }
+            (false, Some(module)) => {
+                pactl::unload_module(module);
+                self.loop_monitor = None;
+            }
+            _ => {}
+        }
+        Ok(())
+    }
+
+    /// Loads, unloads or repoints loopback C to match the pass-through settings.
+    pub fn sync_mic_loop(&mut self, settings: &Settings) -> Result<(), String> {
+        let desired = if settings.mic_passthrough {
+            resolve_mic_source(settings)?
+        } else {
+            None
+        };
+
+        if desired == self.mic_input {
+            return Ok(());
+        }
+
+        if let Some(module) = self.loop_mic.take() {
+            pactl::unload_module(module);
+        }
+        self.mic_input = None;
+
+        if let Some(mic) = desired {
+            self.loop_mic = Some(pactl::load_module(
+                "module-loopback",
+                &[
+                    format!("source={mic}"),
+                    format!("sink={MIX_SINK}"),
+                    latency(),
+                ],
+            )?);
+            self.mic_input = Some(mic);
+        }
+        Ok(())
+    }
+
+    /// Pushes the three loopback volumes into their sink-inputs.
+    pub fn apply_volumes(&self, settings: &Settings) -> Result<(), String> {
+        let mut errors = Vec::new();
+
+        collect_error(
+            &mut errors,
+            set_module_volume(self.loop_fx_mix, settings.to_mic_volume),
+            "to-mic volume",
+        );
+        if let Some(module) = self.loop_monitor {
+            collect_error(
+                &mut errors,
+                set_module_volume(module, settings.monitor_volume),
+                "monitor volume",
+            );
+        }
+        if let Some(module) = self.loop_mic {
+            collect_error(
+                &mut errors,
+                set_module_volume(module, settings.mic_volume),
+                "mic volume",
+            );
+        }
+
+        join_errors(errors)
+    }
+}
+
+/// Sets the volume of the sink-input created by `module_id`.
+///
+/// A freshly loaded loopback only publishes its stream a moment later, so retry
+/// briefly instead of failing the whole settings change.
+pub fn set_module_volume(module_id: u32, volume: f32) -> Result<(), String> {
+    let clamped = volume.clamp(0.0, MAX_VOLUME);
+
+    for attempt in 0..VOLUME_LOOKUP_ATTEMPTS {
+        if let Some(input) = pactl::list_sink_inputs()?
+            .into_iter()
+            .find(|input| input.owner_module == Some(module_id))
+        {
+            return pactl::set_sink_input_volume(input.index, clamped);
+        }
+        if attempt + 1 < VOLUME_LOOKUP_ATTEMPTS {
+            std::thread::sleep(std::time::Duration::from_millis(VOLUME_LOOKUP_DELAY_MS));
+        }
+    }
+
+    Err(format!(
+        "Could not find the audio stream of module {module_id}"
+    ))
+}
+
+fn collect_error(errors: &mut Vec<String>, result: Result<(), String>, label: &str) {
+    if let Err(err) = result {
+        errors.push(format!("{label}: {err}"));
+    }
+}
+
+fn join_errors(errors: Vec<String>) -> Result<(), String> {
+    if errors.is_empty() {
+        Ok(())
+    } else {
+        Err(errors.join("; "))
     }
 }
 

@@ -109,6 +109,55 @@ impl Default for Settings {
     }
 }
 
+/// Highest volume a slider may reach (150%, matching the UI).
+pub const MAX_VOLUME: f32 = 1.5;
+
+impl Settings {
+    /// Applies a [`SettingsPatch`]: only present fields change, volumes clamp to
+    /// `0.0..=MAX_VOLUME`, stop-all hotkeys are normalized. Turning
+    /// `use_as_default_mic` off also forgets the saved previous default — the
+    /// caller restores it before calling this.
+    pub fn apply_patch(&mut self, patch: &SettingsPatch) -> Result<(), String> {
+        if let Some(enabled) = patch.mic_passthrough {
+            self.mic_passthrough = enabled;
+        }
+        if let Some(source) = &patch.mic_source {
+            self.mic_source = source.clone();
+        }
+        if let Some(volume) = patch.mic_volume {
+            self.mic_volume = volume.clamp(0.0, MAX_VOLUME);
+        }
+        if let Some(volume) = patch.to_mic_volume {
+            self.to_mic_volume = volume.clamp(0.0, MAX_VOLUME);
+        }
+        if let Some(enabled) = patch.monitor_enabled {
+            self.monitor_enabled = enabled;
+        }
+        if let Some(volume) = patch.monitor_volume {
+            self.monitor_volume = volume.clamp(0.0, MAX_VOLUME);
+        }
+        if let Some(enabled) = patch.use_as_default_mic {
+            self.use_as_default_mic = enabled;
+            if !enabled {
+                self.previous_default_source = None;
+            }
+        }
+        if let Some(retrigger) = patch.retrigger {
+            self.retrigger = retrigger;
+        }
+        if let Some(hotkey) = &patch.stop_all_hotkey {
+            self.stop_all_hotkey = hotkey.clone().map(KeyBinding::normalized);
+        }
+        if let Some(close_to_tray) = patch.close_to_tray {
+            self.close_to_tray = close_to_tray;
+        }
+        if let Some(start_minimized) = patch.start_minimized {
+            self.start_minimized = start_minimized;
+        }
+        Ok(())
+    }
+}
+
 /// Persisted configuration (`config.json`).
 #[derive(Serialize, Deserialize, Clone, Debug)]
 #[serde(rename_all = "camelCase")]
@@ -347,5 +396,60 @@ mod tests {
             label: "Ctrl + Shift + F9".to_string(),
         };
         assert_eq!(binding.normalized().mods, vec![Mod::Ctrl, Mod::Shift]);
+    }
+
+    #[test]
+    fn settings_patch_applies_only_present_fields_and_clamps_volumes() {
+        let mut settings = Settings::default();
+
+        let patch: SettingsPatch = serde_json::from_str(
+            r#"{"toMicVolume":9,"monitorVolume":-1,"retrigger":"overlap","micSource":null}"#,
+        )
+        .expect("patch");
+        settings.apply_patch(&patch).expect("apply");
+
+        assert!((settings.to_mic_volume - MAX_VOLUME).abs() < f32::EPSILON);
+        assert!(settings.monitor_volume.abs() < f32::EPSILON);
+        assert_eq!(settings.retrigger, Retrigger::Overlap);
+        assert_eq!(settings.mic_source, None);
+        assert!(
+            (settings.mic_volume - 1.0).abs() < f32::EPSILON,
+            "untouched"
+        );
+        assert_eq!(settings.stop_all_hotkey.expect("kept").code, 82);
+    }
+
+    #[test]
+    fn turning_off_default_mic_forgets_the_previous_default() {
+        let mut settings = Settings {
+            use_as_default_mic: true,
+            previous_default_source: Some("alsa_input.usb".to_string()),
+            ..Settings::default()
+        };
+
+        let patch: SettingsPatch = serde_json::from_str(r#"{"useAsDefaultMic":false}"#).expect("p");
+        settings.apply_patch(&patch).expect("apply");
+
+        assert!(!settings.use_as_default_mic);
+        assert!(settings.previous_default_source.is_none());
+    }
+
+    #[test]
+    fn stop_all_hotkey_patch_normalizes_modifiers() {
+        let mut settings = Settings::default();
+        let patch: SettingsPatch = serde_json::from_str(
+            r#"{"stopAllHotkey":{"code":41,"mods":["alt","ctrl","alt"],"label":"x"}}"#,
+        )
+        .expect("patch");
+
+        settings.apply_patch(&patch).expect("apply");
+
+        let hotkey = settings.stop_all_hotkey.clone().expect("hotkey");
+        assert_eq!(hotkey.mods, vec![Mod::Ctrl, Mod::Alt]);
+
+        let cleared: SettingsPatch =
+            serde_json::from_str(r#"{"stopAllHotkey":null}"#).expect("patch");
+        settings.apply_patch(&cleared).expect("apply");
+        assert!(settings.stop_all_hotkey.is_none());
     }
 }

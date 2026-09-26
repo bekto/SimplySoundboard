@@ -3,12 +3,152 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <link rel="stylesheet" href="/src/styles.css" />
     <title>SimplySoundboard</title>
+    <link rel="stylesheet" href="/src/styles.css" />
     <script type="module" src="/src/main.ts"></script>
   </head>
 
   <body>
-    <div id="app"></div>
+    <header class="topbar">
+      <div class="brand"><div class="logo" data-ic="speaker"></div>SimplySoundboard</div>
+      <button class="pill" id="routerPill" title="Open virtual mic settings"><span class="dot"></span><span id="routerText">Virtual mic ready</span></button>
+      <div class="spacer"></div>
+      <div class="search-wrap"><span data-ic="search"></span><input id="search" class="search" type="text" placeholder="Search sounds…" spellcheck="false"></div>
+      <button class="btn primary" id="addBtn" data-ic="plus">Add sound</button>
+      <button class="icon-btn" id="settingsBtn" title="Settings" data-ic="sliders"></button>
+    </header>
+
+    <!-- Rendered by T12: hidden until the input status reports no keyboard permission. -->
+    <div class="banner hidden" id="banner">
+      <span data-ic="keyboard"></span>
+      <div class="txt" id="bannerText"><b>Hotkeys are off.</b> SimplySoundboard needs permission to see key presses while you're in a game.<small>One-time setup · asks for your password</small></div>
+      <button class="btn primary small" id="bannerBtn">Enable hotkeys</button>
+    </div>
+
+    <main id="main">
+      <div class="grid" id="grid"></div>
+      <div class="empty hidden" id="empty">
+        <div class="empty-box" id="emptyBox">
+          <div class="big" data-ic="upload"></div>
+          <h2>Drop sound files here</h2>
+          <p>or click to choose files · WAV, OGG, OPUS, FLAC, MP3</p>
+          <button class="btn primary" data-ic="plus">Add sounds</button>
+        </div>
+      </div>
+    </main>
+
+    <footer class="bottombar">
+      <button class="btn stop" id="stopAll" data-ic="stop">Stop all <span class="kbd" id="stopKbd">Num 0</span></button>
+      <span class="now" id="nowPlaying">Nothing playing</span>
+      <div class="spacer"></div>
+      <label class="ctl" title="Send your real microphone through the virtual mic"><span data-ic="mic"></span>My voice <input type="checkbox" class="switch" id="bbMic"></label>
+      <div class="ctl" title="How loud sounds are for others"><span data-ic="radio"></span>To mic <input type="range" min="0" max="150" id="bbToMic"><span class="val" id="bbToMicVal"></span></div>
+      <div class="ctl" id="bbMeWrap" title="How loud sounds are for you"><span data-ic="headphones"></span>Me <input type="range" min="0" max="150" id="bbMe"><span class="val" id="bbMeVal"></span></div>
+    </footer>
+
+    <!-- Context menu (T11). -->
+    <div class="menu hidden" id="menu"></div>
+
+    <!-- Edit modal (T11). -->
+    <div class="backdrop hidden" id="editModal">
+      <div class="modal" role="dialog" aria-labelledby="edTitle">
+        <div class="modal-head"><h2 id="edTitle">Edit sound</h2><button class="icon-btn plain" data-close data-ic="x"></button></div>
+        <div class="modal-body">
+          <div class="edit-top">
+            <div class="emoji-preview" id="edPrev"></div>
+            <div class="field grow"><label for="edName">Name</label><input type="text" id="edName" maxlength="60" spellcheck="false"></div>
+          </div>
+          <div class="field"><label>Icon</label><div class="emoji-row" id="edEmojis"></div></div>
+          <div class="field"><label>Color</label><div class="swatches" id="edColors"></div></div>
+          <div class="field"><label for="edVol">Volume <span id="edVolVal"></span></label><input type="range" id="edVol" min="0" max="100"></div>
+          <div class="field"><label>Hotkey</label>
+            <div class="hotkey-row"><button class="hotkey-btn" id="edKey"></button><button class="btn ghost small" id="edKeyClear">Clear</button></div>
+          </div>
+          <div class="file-info" id="edFile"></div>
+        </div>
+        <div class="modal-foot">
+          <button class="btn danger-ghost" id="edDelete" data-ic="trash">Delete</button>
+          <div class="spacer"></div>
+          <button class="btn ghost" id="edTest" data-ic="play">Test</button>
+          <button class="btn" data-close>Cancel</button>
+          <button class="btn primary" id="edSave">Save</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Key capture modal (T11). -->
+    <div class="backdrop hidden" id="capModal">
+      <div class="modal small" role="dialog">
+        <div class="cap" id="capReady">
+          <div class="cap-icon" data-ic="keyboard"></div>
+          <h2>Press a key</h2>
+          <div class="muted" id="capFor"></div>
+          <div class="cap-display" id="capDisplay"></div>
+          <div class="cap-warn hidden" id="capWarn"></div>
+          <p class="hint">Tip: numpad and F13–F24 keys won't clash with game controls.<br><span class="kbd">Esc</span> cancel · <span class="kbd">Backspace</span> remove key</p>
+        </div>
+        <div class="cap hidden" id="capNoAccess">
+          <div class="cap-icon" data-ic="keyboard"></div>
+          <h2>Keyboard access needed</h2>
+          <p class="hint">To record and use hotkeys inside games, SimplySoundboard needs permission to see key presses. This is a one-time setup and asks for your password.</p>
+        </div>
+        <div class="modal-foot">
+          <div class="spacer"></div>
+          <button class="btn" id="capCancel">Cancel</button>
+          <button class="btn primary" id="capOk" disabled>Use this key</button>
+          <button class="btn primary hidden" id="capEnable">Enable hotkeys</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Confirm modal (T11). -->
+    <div class="backdrop hidden" id="confirmModal">
+      <div class="modal small" role="alertdialog">
+        <div class="modal-head"><h2 id="cfTitle"></h2></div>
+        <div class="modal-body"><div class="muted" id="cfText"></div></div>
+        <div class="modal-foot"><div class="spacer"></div><button class="btn" id="cfNo">Cancel</button><button class="btn primary" id="cfYes" style="background:var(--danger)">Delete</button></div>
+      </div>
+    </div>
+
+    <!-- Settings drawer (T12). -->
+    <div class="scrim hidden" id="scrim"></div>
+    <aside class="drawer" id="drawer" aria-label="Settings">
+      <div class="drawer-head"><h2>Settings</h2><button class="icon-btn plain" id="drawerClose" data-ic="x"></button></div>
+      <div class="drawer-body">
+        <section>
+          <h3>Virtual microphone</h3>
+          <div class="status-card" id="vmCard"><span class="dot"></span><div><b id="vmTitle">SimplySoundboard Mic is ready</b><small id="vmSub">In your game, Discord or OBS, choose “SimplySoundboard Mic” as the microphone.</small></div></div>
+          <div class="row"><div><div class="row-title">Use as system default mic</div><div class="row-sub">Apps using the default mic get your sounds automatically. Restored when you quit.</div></div><input type="checkbox" class="switch" id="sDefault"></div>
+          <div><button class="btn ghost small" id="sRecreate" data-ic="refresh">Recreate virtual mic</button></div>
+        </section>
+        <section>
+          <h3>Your microphone</h3>
+          <div class="row"><div><div class="row-title">Pass my voice through</div><div class="row-sub">Others hear you and your sounds on one mic.</div></div><input type="checkbox" class="switch" id="sMic"></div>
+          <div class="field"><label for="sMicDev">Input device</label><select id="sMicDev"></select></div>
+          <div class="field"><label for="sMicVol">Mic volume <span id="sMicVolVal"></span></label><input type="range" id="sMicVol" min="0" max="150"></div>
+        </section>
+        <section>
+          <h3>Playback</h3>
+          <div class="row"><div><div class="row-title">Hear sounds myself</div><div class="row-sub">Plays sounds on your headphones too.</div></div><input type="checkbox" class="switch" id="sMonitor"></div>
+          <div class="field"><label>When a playing sound is triggered again</label>
+            <div class="seg" id="sRetrigger"><button data-v="restart">Restart</button><button data-v="overlap">Play on top</button><button data-v="stop">Stop it</button></div></div>
+        </section>
+        <section>
+          <h3>Hotkeys</h3>
+          <div class="row"><div class="row-title">Stop all sounds</div><button class="hotkey-btn set" id="sStopKey" style="flex:0 0 auto"></button></div>
+          <div class="access" id="sAccess"></div>
+          <div class="row-sub">Hotkeys work everywhere, even in fullscreen games. The key press still reaches the game, so pick keys you don't use in-game.</div>
+        </section>
+        <section>
+          <h3>App</h3>
+          <div class="row"><div class="row-title">Keep running in tray when closed</div><input type="checkbox" class="switch" id="sTray"></div>
+          <div class="row"><div class="row-title">Start minimized</div><input type="checkbox" class="switch" id="sStartMin"></div>
+        </section>
+        <div class="about">SimplySoundboard 0.1.0 · Requires PipeWire</div>
+      </div>
+    </aside>
+
+    <div class="drop hidden" id="drop"><div><span data-ic="upload"></span><br>Drop to add sounds</div></div>
+    <div class="toasts" id="toasts"></div>
   </body>
 </html>

@@ -2,6 +2,7 @@
 
 use std::sync::{Mutex, MutexGuard};
 
+use crate::audio::router::Router;
 use crate::config;
 use crate::model::{Config, InputStatus, RouterStatus};
 
@@ -16,6 +17,8 @@ pub fn lock<T>(mutex: &Mutex<T>) -> MutexGuard<'_, T> {
 /// Long-lived state shared by every command and background thread.
 pub struct Core {
     pub config: Mutex<Config>,
+    /// The running audio graph, if one could be built.
+    pub router: Mutex<Option<Router>>,
     pub router_status: Mutex<RouterStatus>,
     pub input: Mutex<InputStatus>,
 }
@@ -24,6 +27,7 @@ impl Core {
     pub fn new(config: Config) -> Self {
         Self {
             config: Mutex::new(config),
+            router: Mutex::new(None),
             router_status: Mutex::new(RouterStatus::default()),
             input: Mutex::new(InputStatus::default()),
         }

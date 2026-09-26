@@ -2,9 +2,10 @@
 
 use tauri::{AppHandle, State};
 
+use crate::audio;
 use crate::config;
 use crate::library::{self, ImportResult};
-use crate::model::{AppState, Sound, SoundPatch};
+use crate::model::{AppState, RouterStatus, Sound, SoundPatch};
 use crate::state::{lock, Core};
 
 /// Everything the frontend needs to render itself.
@@ -101,3 +102,11 @@ pub fn reorder_sounds(
 /// Hook called after every library mutation. T07 fills this in to rebuild the
 /// hotkey bindings from the updated config.
 pub fn on_sounds_changed(_app: &AppHandle) {}
+
+/// Rebuilds the virtual microphone from scratch.
+#[tauri::command]
+pub fn restart_router(app: AppHandle) -> Result<RouterStatus, String> {
+    audio::stop(&app);
+    audio::start(&app)?;
+    Ok(audio::status(&app))
+}

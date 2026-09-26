@@ -2,6 +2,7 @@
 
 use std::sync::{Mutex, MutexGuard};
 
+use crate::audio::player::Player;
 use crate::audio::router::Router;
 use crate::config;
 use crate::model::{Config, InputStatus, RouterStatus};
@@ -21,6 +22,8 @@ pub struct Core {
     pub router: Mutex<Option<Router>>,
     pub router_status: Mutex<RouterStatus>,
     pub input: Mutex<InputStatus>,
+    /// Running `pw-play` instances.
+    pub player: Player,
 }
 
 impl Core {
@@ -30,6 +33,7 @@ impl Core {
             router: Mutex::new(None),
             router_status: Mutex::new(RouterStatus::default()),
             input: Mutex::new(InputStatus::default()),
+            player: Player::new(),
         }
     }
 

@@ -106,6 +106,11 @@ pub fn shutdown(app: &AppHandle) {
         return;
     }
     log::info!("Shutting down");
+
+    {
+        let core = app.state::<Core>();
+        core.player.stop_all();
+    }
     stop(app);
 }
 

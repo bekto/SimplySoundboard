@@ -3073,6 +3073,7 @@ dependencies = [
  "env_logger",
  "evdev",
  "log",
+ "nix 0.29.0",
  "serde",
  "serde_json",
  "symphonia",

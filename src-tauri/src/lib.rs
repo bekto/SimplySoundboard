@@ -24,7 +24,10 @@ pub fn run() {
             commands::update_sound,
             commands::delete_sound,
             commands::reorder_sounds,
-            commands::restart_router
+            commands::restart_router,
+            commands::play_sound,
+            commands::stop_sound,
+            commands::stop_all
         ])
         .setup(|app| {
             install_signal_handler(app.handle().clone());

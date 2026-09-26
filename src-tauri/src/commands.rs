@@ -1,11 +1,11 @@
 //! Tauri command handlers exposed to the frontend.
 
-use tauri::{AppHandle, State};
+use tauri::{AppHandle, Manager, State};
 
 use crate::audio;
 use crate::config;
 use crate::library::{self, ImportResult};
-use crate::model::{AppState, RouterStatus, Sound, SoundPatch};
+use crate::model::{AppState, RouterState, RouterStatus, Sound, SoundPatch};
 use crate::state::{lock, Core};
 
 /// Everything the frontend needs to render itself.
@@ -109,4 +109,41 @@ pub fn restart_router(app: AppHandle) -> Result<RouterStatus, String> {
     audio::stop(&app);
     audio::start(&app)?;
     Ok(audio::status(&app))
+}
+
+/// Plays a sound into the virtual microphone. Shared by the `play_sound` command
+/// and the hotkey dispatcher.
+pub fn play_by_id(app: &AppHandle, id: &str) -> Result<(), String> {
+    if audio::status(app).state != RouterState::Ok {
+        return Err("Virtual mic is not running".to_string());
+    }
+
+    let core = app.state::<Core>();
+    let config = core.config();
+    let sound = config
+        .sounds
+        .iter()
+        .find(|sound| sound.id == id)
+        .ok_or_else(|| "Sound not found".to_string())?;
+    let path = config::sounds_dir()?.join(&sound.file);
+
+    core.player
+        .play(app, sound, &path, config.settings.retrigger)
+}
+
+#[tauri::command]
+pub fn play_sound(app: AppHandle, id: String) -> Result<(), String> {
+    play_by_id(&app, &id)
+}
+
+#[tauri::command]
+pub fn stop_sound(app: AppHandle, id: String) -> Result<(), String> {
+    app.state::<Core>().player.stop(&id);
+    Ok(())
+}
+
+#[tauri::command]
+pub fn stop_all(app: AppHandle) -> Result<(), String> {
+    app.state::<Core>().player.stop_all();
+    Ok(())
 }

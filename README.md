@@ -4,10 +4,14 @@ A small, friendly **Linux-only** soundboard. Sounds live on cards; each card can
 hotkey that works **inside games**. Sounds are mixed into a **virtual microphone** so teammates on
 Discord / in-game voice hear them.
 
+![The card grid: five sounds, hotkey chips, one card playing](docs/screenshot-grid.png)
+
 - Global hotkeys read `/dev/input` directly (read-only, never grabbed) — they work on X11, on every
   Wayland compositor and while a fullscreen game has focus.
 - Virtual mic **"SimplySoundboard Mic"** = soundboard sounds + optional pass-through of your real mic.
 - Optional monitor so you hear the sounds yourself, and a *Stop all* hotkey.
+
+![Settings drawer: virtual mic status, mic pass-through, monitor and retrigger options](docs/screenshot-settings.png)
 
 ## What you need
 

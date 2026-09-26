@@ -1,0 +1,1 @@
+/** Tiny observable app store. */

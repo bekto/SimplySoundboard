@@ -140,6 +140,10 @@ fn setup_tray(app: &AppHandle) -> tauri::Result<()> {
             other => log::debug!("Unhandled tray menu item {other}"),
         })
         .on_tray_icon_event(|tray, event| {
+            // Linux note: Tauri's tray on Linux uses the AppIndicator backend, which
+            // never delivers mouse events (libappindicator owns the click and opens
+            // the menu). The window is therefore reached through the menu's first
+            // item there; this handler covers the platforms that do report clicks.
             if let TrayIconEvent::Click {
                 button: MouseButton::Left,
                 button_state: MouseButtonState::Up,

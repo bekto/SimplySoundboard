@@ -2,8 +2,8 @@
 import * as api from "../api";
 import type { Sound } from "../api";
 import { ic } from "../icons";
-import { soundById, state, subscribe, type State } from "../store";
-import { openMenu } from "./menu";
+import { set, soundById, state, subscribe, type State } from "../store";
+import { assignKey, openMenu } from "./menu";
 import { pickSounds } from "./topbar";
 import { toast } from "./toast";
 
@@ -134,7 +134,11 @@ export function mountGrid(): void {
       }
       return;
     }
-    // A chip click ("Change key"/"Set key") is key capture in T11; for now it plays.
+    if (action === "assign") {
+      // "Set key" / "Change key" chip: capture a key and save it right away.
+      void assignKey(id);
+      return;
+    }
     void api.playSound(id).catch((err: unknown) => toast(String(err), "error"));
   });
 
@@ -150,6 +154,66 @@ export function mountGrid(): void {
     if (!card || (event.key !== "Enter" && event.key !== " ")) return;
     event.preventDefault();
     void api.playSound(card.dataset.id ?? "").catch((err: unknown) => toast(String(err), "error"));
+  });
+
+  // ---- drag to reorder ----------------------------------------------------
+  // `dragId` is only ever set by our own dragstart, so file drags (handled by
+  // the window's drag-drop event) can never reorder anything.
+  let dragId: string | null = null;
+
+  grid.addEventListener("dragstart", (event) => {
+    const card = (event.target as HTMLElement).closest<HTMLElement>(".card[data-id]");
+    if (!card || !event.dataTransfer || !card.dataset.id) return;
+    dragId = card.dataset.id;
+    card.classList.add("dragging");
+    event.dataTransfer.effectAllowed = "move";
+    event.dataTransfer.setData("text/plain", dragId);
+  });
+
+  grid.addEventListener("dragend", () => {
+    dragId = null;
+    for (const el of grid.querySelectorAll(".dragging,.drop-target")) el.classList.remove("dragging", "drop-target");
+  });
+
+  grid.addEventListener("dragover", (event) => {
+    if (!dragId || !event.dataTransfer || event.dataTransfer.types.includes("Files")) return;
+    event.preventDefault(); // required for the drop to fire
+    event.dataTransfer.dropEffect = "move";
+    const card = (event.target as HTMLElement).closest<HTMLElement>(".card[data-id]");
+    for (const el of grid.querySelectorAll(".drop-target")) {
+      if (el !== card) el.classList.remove("drop-target");
+    }
+    if (card && card.dataset.id !== dragId) card.classList.add("drop-target");
+  });
+
+  grid.addEventListener("drop", (event) => {
+    const from = dragId;
+    dragId = null;
+    const card = (event.target as HTMLElement).closest<HTMLElement>(".card[data-id]");
+    if (!from || !card) return;
+    event.preventDefault();
+    const targetId = card.dataset.id ?? "";
+    if (!targetId || targetId === from) return;
+
+    // Optimistic: the card lands before the drop target, then the backend confirms.
+    const sounds = [...state.sounds];
+    const fromIndex = sounds.findIndex((sound) => sound.id === from);
+    if (fromIndex < 0) return;
+    const [moved] = sounds.splice(fromIndex, 1);
+    const toIndex = sounds.findIndex((sound) => sound.id === targetId);
+    if (toIndex < 0) return;
+    sounds.splice(toIndex, 0, moved);
+    set({ sounds });
+
+    void api.reorderSounds(sounds.map((sound) => sound.id)).catch(async (err: unknown) => {
+      toast(String(err), "error");
+      try {
+        const fresh = await api.getState();
+        set({ sounds: fresh.sounds, settings: fresh.settings, router: fresh.router, input: fresh.input });
+      } catch {
+        /* keep the optimistic order if the reload fails too */
+      }
+    });
   });
 
   emptyBox.addEventListener("click", () => void pickSounds());

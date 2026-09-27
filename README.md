@@ -26,7 +26,8 @@ PipeWire with the PulseAudio interface (the default on modern Fedora/Ubuntu/Arch
 
 ## Install
 
-1. **Package** (recommended — hotkeys work immediately, no extra prompt):
+1. **Package** from the [Releases page](https://github.com/bekto/SimplySoundboard/releases/latest)
+   (recommended — hotkeys work immediately, no extra prompt):
    - Fedora / openSUSE: install the `.rpm`
    - Debian / Ubuntu: install the `.deb`
    - any distro: run the `.AppImage` (then click *Enable hotkeys* once)
@@ -88,6 +89,11 @@ Checks:
 cd src-tauri && cargo clippy -- -D warnings && cargo test
 npm run build
 ```
+
+Releasing: bump `version` in `package.json`, `src-tauri/tauri.conf.json` and `src-tauri/Cargo.toml`,
+commit, then `git tag v0.2.0 && git push origin v0.2.0`. The *Release* workflow builds the
+`.AppImage`, `.deb` and `.rpm` on Ubuntu 22.04 and attaches them to a draft release; review it on
+GitHub and click *Publish*.
 
 ## License
 

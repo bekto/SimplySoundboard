@@ -1,0 +1,47 @@
+# Builds the Linux packages and attaches them to a draft GitHub release.
+# Trigger: push a tag like `v0.1.0` (must match the version in tauri.conf.json).
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  linux:
+    # Oldest supported runner = oldest glibc: packages built here also run on newer distros.
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev libssl-dev patchelf
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: lts/*
+          cache: npm
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: swatinem/rust-cache@v2
+        with:
+          workspaces: "./src-tauri -> target"
+
+      - run: npm ci
+
+      - uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tagName: ${{ github.ref_name }}
+          releaseName: SimplySoundboard ${{ github.ref_name }}
+          releaseBody: |
+            **Fedora / openSUSE:** download the `.rpm` and run `sudo dnf install ./SimplySoundboard-*.rpm`
+            **Debian / Ubuntu:** download the `.deb` and run `sudo apt install ./SimplySoundboard_*.deb`
+            **Any other distro:** download the `.AppImage`, `chmod +x` it and run it (click *Enable hotkeys* once).
+          releaseDraft: true
